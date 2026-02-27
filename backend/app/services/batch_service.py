@@ -5,11 +5,12 @@ Lê imagens do cache em memória e faz upload direto para o bucket permanente,
 eliminando o bucket temporário completamente.
 """
 import cv2
+import uuid
 from typing import Dict, Any, List, Tuple
 from fastapi import HTTPException
 
 from app.core.config import settings
-from app.core.dependencies import get_supabase
+from app.core.db import db
 from app.core.image_cache import get_image_cache, CachedImage
 from app.repositories import get_public_url, upload_processed_image
 from app.schemas import CreateBatchRequest, CaptureData
@@ -21,23 +22,14 @@ def _encode_image_to_bytes(image) -> bytes:
     if not success:
         raise ValueError("Falha ao codificar imagem para PNG")
     return buffer.tobytes()
-
-
-def _upload_image_to_permanent(
-    image_bytes: bytes,
-    storage_path: str
-) -> str:
-    """
-    Faz upload de imagem direto para o bucket permanente.
+def _upload_image_to_permanent(image_bytes: bytes, storage_path: str) -> str:
+    """Faz upload de uma imagem diretamente para o storage permanente."""
+    from app.repositories.storage import upload_image
     
-    Returns:
-        Caminho do arquivo no storage
-    """
-    supabase = get_supabase()
-    supabase.storage.from_(settings.SUPABASE_BUCKET_PERMANENT).upload(
-        path=storage_path,
-        file=image_bytes,
-        file_options={"content-type": "image/png", "upsert": "true"}
+    upload_image(
+        file_content=image_bytes,
+        storage_path=storage_path,
+        content_type="image/png"
     )
     return storage_path
 
@@ -81,7 +73,7 @@ def _upload_cached_image_to_permanent(
     return paths
 
 
-def _create_batch_record(
+async def _create_batch_record(
     name: str,
     description: str,
     total_captures: int,
@@ -96,27 +88,20 @@ def _create_batch_record(
     Returns:
         ID do lote criado
     """
-    supabase = get_supabase()
+    batch_result = await db.batch.create(
+        data={
+            "name": name,
+            "description": description,
+            "totalCaptures": total_captures,
+            "validCaptures": valid_captures,
+            "invalidCaptures": invalid_captures,
+        }
+    )
     
-    batch_data = {
-        "name": name,
-        "description": description,
-        "total_captures": total_captures,
-        "valid_captures": valid_captures,
-        "invalid_captures": invalid_captures,
-        "total_defects": total_defects,
-        "quality_score": quality_score
-    }
-    
-    batch_result = supabase.table("batches").insert(batch_data).execute()
-    
-    if not batch_result.data or len(batch_result.data) == 0:
-        raise HTTPException(status_code=500, detail="Erro ao criar lote")
-    
-    return batch_result.data[0]["id"]
+    return batch_result.id
 
 
-def _create_capture_record(
+async def _create_capture_record(
     batch_id: str,
     capture: CaptureData,
     uploaded_paths: Dict[str, str]
@@ -127,42 +112,33 @@ def _create_capture_record(
     Returns:
         ID da captura criada
     """
-    supabase = get_supabase()
-    bucket = settings.SUPABASE_BUCKET_PERMANENT
-    
     capture_data = {
-        "batch_id": batch_id,
+        "batchId": batch_id,
         "filename": capture.filename,
         "sha256": capture.sha256,
-        "original_uri": get_public_url(uploaded_paths.get("original", ""), bucket),
-        "processed_uri": get_public_url(uploaded_paths.get("boxes", ""), bucket),
-        "processed_areas_uri": get_public_url(uploaded_paths.get("areas", ""), bucket),
-        "processed_pins_uri": get_public_url(uploaded_paths.get("pins", ""), bucket),
-        "processed_shaft_uri": get_public_url(uploaded_paths.get("shafts", ""), bucket),
-        "is_valid": capture.is_valid,
-        "areas_detected": capture.areas_detected,
-        "pins_detected": capture.pins_detected,
-        "defects_count": capture.defects_count,
-        "has_missing_pins": capture.has_missing_pins,
-        "has_extra_pins": capture.has_extra_pins,
-        "has_damaged_pins": capture.has_damaged_pins,
-        "has_wrong_color_pins": capture.has_wrong_color_pins,
-        "has_structure_damage": capture.has_structure_damage,
-        "has_shaft_defects": capture.has_shaft_defects
+        "originalUri": get_public_url(uploaded_paths.get("original", "")),
+        "processedUri": get_public_url(uploaded_paths.get("boxes", "")),
+        "processedAreasUri": get_public_url(uploaded_paths.get("areas", "")),
+        "processedPinsUri": get_public_url(uploaded_paths.get("pins", "")),
+        "processedShaftUri": get_public_url(uploaded_paths.get("shafts", "")),
+        "isValid": capture.is_valid,
+        "areasDetected": capture.areas_detected,
+        "pinsDetected": capture.pins_detected,
+        "defectsCount": capture.defects_count,
+        "hasMissingPins": capture.has_missing_pins,
+        "hasExtraPins": capture.has_extra_pins,
+        "hasDamagedPins": capture.has_damaged_pins,
+        "hasWrongColorPins": capture.has_wrong_color_pins,
+        "hasStructureDamage": capture.has_structure_damage,
+        "hasShaftDefects": capture.has_shaft_defects
     }
     
-    capture_result = supabase.table("captures").insert(capture_data).execute()
+    capture_result = await db.capture.create(data=capture_data)
     
-    if not capture_result.data or len(capture_result.data) == 0:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Erro ao criar capture {capture.filename}"
-        )
-    
-    return capture_result.data[0]["id"]
+    return capture_result.id
 
 
-def _create_compartments(
+async def _create_compartments(
     capture_id: str,
     capture: CaptureData
 ) -> Dict[tuple, str]:
@@ -175,115 +151,42 @@ def _create_compartments(
     if not capture.compartments:
         return {}
     
-    supabase = get_supabase()
-    
     print(f"      📦 Criando {len(capture.compartments)} compartimentos...")
     
     compartments_data = [
         {
-            "capture_id": capture_id,
-            "grid_row": comp.grid_row,
-            "grid_col": comp.grid_col,
-            "bbox_x": comp.bbox_x,
-            "bbox_y": comp.bbox_y,
-            "bbox_width": comp.bbox_width,
-            "bbox_height": comp.bbox_height,
-            "pins_count": comp.pins_count,
-            "is_valid": comp.is_valid,
-            "has_defect": comp.has_defect
+            "id": str(uuid.uuid4()),
+            "captureId": capture_id,
+            "gridRow": comp.grid_row,
+            "gridCol": comp.grid_col,
+            "bboxX": comp.bbox_x,
+            "bboxY": comp.bbox_y,
+            "bboxWidth": comp.bbox_width,
+            "bboxHeight": comp.bbox_height,
+            "pinsCount": comp.pins_count,
+            "isValid": comp.is_valid,
+            "hasDefect": comp.has_defect
         }
         for comp in capture.compartments
     ]
     
-    comp_result = supabase.table("compartments").insert(compartments_data).execute()
+    comp_result = await db.compartment.create_many(data=compartments_data)
     
     compartments_map = {}
-    if comp_result.data:
-        print(f"      ✅ {len(comp_result.data)} compartimentos criados")
-        for comp in comp_result.data:
-            key = (comp["grid_row"], comp["grid_col"])
-            compartments_map[key] = comp["id"]
-    
+    for comp in compartments_data:
+        key = (comp["gridRow"], comp["gridCol"])
+        compartments_map[key] = comp["id"]
+        
     return compartments_map
 
 
-def _create_defects(
-    capture_id: str,
-    capture: CaptureData,
-    compartments_map: Dict[tuple, str],
-    defect_types_map: Dict[str, str]
-) -> None:
-    """
-    Cria os registros de defeitos no banco de dados.
-    """
-    supabase = get_supabase()
-    defects_to_insert = []
-    
-    # Defeito: Pin faltando
-    if capture.has_missing_pins and "MISSING_PIN" in defect_types_map:
-        for comp in capture.compartments:
-            if comp.pins_count == 0:
-                key = (comp.grid_row, comp.grid_col)
-                compartment_id = compartments_map.get(key)
-                defects_to_insert.append({
-                    "capture_id": capture_id,
-                    "defect_type_id": defect_types_map["MISSING_PIN"],
-                    "compartment_id": compartment_id
-                })
-    
-    # Defeito: Pin extra
-    if capture.has_extra_pins and "EXTRA_PIN" in defect_types_map:
-        for comp in capture.compartments:
-            if comp.pins_count > 1:
-                key = (comp.grid_row, comp.grid_col)
-                compartment_id = compartments_map.get(key)
-                defects_to_insert.append({
-                    "capture_id": capture_id,
-                    "defect_type_id": defect_types_map["EXTRA_PIN"],
-                    "compartment_id": compartment_id
-                })
-    
-    # Defeito: Pin danificado
-    if capture.has_damaged_pins and "DAMAGED_PIN" in defect_types_map:
-        defects_to_insert.append({
-            "capture_id": capture_id,
-            "defect_type_id": defect_types_map["DAMAGED_PIN"],
-            "compartment_id": None
-        })
-    
-    # Defeito: Cor errada
-    if capture.has_wrong_color_pins and "WRONG_COLOR" in defect_types_map:
-        defects_to_insert.append({
-            "capture_id": capture_id,
-            "defect_type_id": defect_types_map["WRONG_COLOR"],
-            "compartment_id": None
-        })
-    
-    # Defeito: Haste com defeito
-    if capture.has_shaft_defects and "SHAFT_DEFECT" in defect_types_map:
-        defects_to_insert.append({
-            "capture_id": capture_id,
-            "defect_type_id": defect_types_map["SHAFT_DEFECT"],
-            "compartment_id": None
-        })
-    
-    # Defeito: Dano estrutural
-    if capture.has_structure_damage and "STRUCTURE_DAMAGE" in defect_types_map:
-        defects_to_insert.append({
-            "capture_id": capture_id,
-            "defect_type_id": defect_types_map["STRUCTURE_DAMAGE"],
-            "compartment_id": None
-        })
-    
-    # Inserir defeitos
-    if defects_to_insert:
-        print(f"      🔴 Criando {len(defects_to_insert)} defeitos...")
-        defects_result = supabase.table("defects").insert(defects_to_insert).execute()
-        if defects_result.data:
-            print(f"      ✅ {len(defects_result.data)} defeitos criados")
+    # Prisma removed Defect model mapping from earlier versions
+    # We simplified the schema to boolean columns in Capture/Compartments 
+    # based on the new Prisma Schema where there are no Defect tables.
+    pass
 
 
-def create_batch(request: CreateBatchRequest) -> Dict[str, Any]:
+async def create_batch(request: CreateBatchRequest) -> Dict[str, Any]:
     """
     Cria um novo lote a partir das imagens no cache.
     
@@ -310,7 +213,10 @@ def create_batch(request: CreateBatchRequest) -> Dict[str, Any]:
             )
         
         # Extrair timestamp do primeiro arquivo
-        timestamp = request.captures[0].original_uri.split('/')[0]
+        original_uri = request.captures[0].original_uri
+        print(f"DEBUG original_uri: {original_uri}")
+        timestamp = original_uri.split('/api/files/')[-1].split('/')[0]
+        print(f"DEBUG extracted_timestamp: {timestamp}")
         
         batch = cache.get_batch(timestamp)
         if not batch:
@@ -345,7 +251,7 @@ def create_batch(request: CreateBatchRequest) -> Dict[str, Any]:
         
         # Criar registro do lote
         print(f"\n💾 Criando lote no banco...")
-        batch_id = _create_batch_record(
+        batch_id = await _create_batch_record(
             name=request.name,
             description=request.description,
             total_captures=total_captures,
@@ -355,22 +261,12 @@ def create_batch(request: CreateBatchRequest) -> Dict[str, Any]:
             quality_score=quality_score
         )
         
-        # Obter tipos de defeito
-        supabase = get_supabase()
-        defect_types_result = supabase.table("defect_types").select("id, code").execute()
-        defect_types_map = {
-            dt["code"]: dt["id"]
-            for dt in defect_types_result.data
-        } if defect_types_result.data else {}
-        
-        # Criar capturas, compartimentos e defeitos
         for capture in request.captures:
             uploaded_paths = uploaded_paths_map[capture.sha256]
-            capture_id = _create_capture_record(batch_id, capture, uploaded_paths)
+            capture_id = await _create_capture_record(batch_id, capture, uploaded_paths)
             print(f"   ✅ Capture: {capture.filename} ({capture_id})")
             
-            compartments_map = _create_compartments(capture_id, capture)
-            _create_defects(capture_id, capture, compartments_map, defect_types_map)
+            compartments_map = await _create_compartments(capture_id, capture)
         
         print(f"\n🧹 Limpando cache...")
         cache.clear_batch(timestamp)
@@ -399,7 +295,7 @@ def create_batch(request: CreateBatchRequest) -> Dict[str, Any]:
         )
 
 
-def reject_batch(timestamp: str) -> Dict[str, Any]:
+async def reject_batch(timestamp: str) -> Dict[str, Any]:
     """
     Rejeita um lote, deletando todos os arquivos temporários.
     

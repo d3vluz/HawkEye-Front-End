@@ -106,7 +106,7 @@ export default function HawkEyePage() {
     return () => {
       files.forEach((file) => URL.revokeObjectURL(file.preview))
     }
-  }, [])
+  }, [files])
 
   // --- Drag and Drop ---
   const handleDragOver = (e: React.DragEvent) => { e.preventDefault(); setIsDragOver(true) }

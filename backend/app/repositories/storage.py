@@ -1,13 +1,23 @@
 """
-Repository para operações de storage no Supabase.
+Repository para operações de storage no disco local.
+Substitui o Supabase Storage.
 """
+import os
 import hashlib
 import cv2
 import numpy as np
+import shutil
 from fastapi import HTTPException
 
 from app.core.config import settings
-from app.core.dependencies import get_supabase
+
+# Diretório base para storage local montado via Docker
+STORAGE_DIR = "/data/images"
+
+
+def _ensure_dir(path: str):
+    """Garante que o diretório exista."""
+    os.makedirs(os.path.dirname(path), exist_ok=True)
 
 
 def calculate_sha256(file_content: bytes) -> str:
@@ -15,60 +25,31 @@ def calculate_sha256(file_content: bytes) -> str:
     return hashlib.sha256(file_content).hexdigest()
 
 
-def get_public_url(
-    storage_path: str, 
-    bucket: str = settings.SUPABASE_BUCKET_TEMP
-) -> str:
+def get_public_url(storage_path: str, bucket: str = None) -> str:
     """
-    Obtém a URL pública de um arquivo no Supabase Storage.
-    
-    Args:
-        storage_path: Caminho do arquivo no bucket
-        bucket: Nome do bucket (default: pipeline-temp)
-    
-    Returns:
-        URL pública do arquivo ou string vazia em caso de erro
+    Obtém a URL da API para acesso a uma imagem local.
+    Assumimos que as imagens serão expostas como arquivos estáticos.
     """
     if not storage_path:
         return ""
-    try:
-        supabase = get_supabase()
-        url = supabase.storage.from_(bucket).get_public_url(storage_path)
-        return url
-    except Exception as e:
-        print(f"Erro ao obter URL pública para {storage_path}: {e}")
-        return ""
+    # Retorna uma rota relativa da API (precisa estar configurada no FastAPI)
+    return f"/api/files/{storage_path}"
 
 
-def download_image(
-    storage_path: str, 
-    bucket: str = settings.SUPABASE_BUCKET_TEMP
-) -> np.ndarray:
+def download_image(storage_path: str, bucket: str = None) -> np.ndarray:
     """
-    Baixa uma imagem do Supabase Storage.
-    
-    Args:
-        storage_path: Caminho do arquivo no bucket
-        bucket: Nome do bucket (default: pipeline-temp)
-    
-    Returns:
-        Imagem como array numpy (BGR)
-    
-    Raises:
-        HTTPException: Se houver erro no download ou decodificação
+    Carrega uma imagem do disco local.
     """
+    full_path = os.path.join(STORAGE_DIR, storage_path)
     try:
-        supabase = get_supabase()
-        res = supabase.storage.from_(bucket).download(storage_path)
-        nparr = np.frombuffer(res, np.uint8)
-        img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+        img = cv2.imread(full_path, cv2.IMREAD_COLOR)
         if img is None:
-            raise ValueError(f"Não foi possível decodificar: {storage_path}")
+            raise ValueError(f"Não foi possível decodificar ou encontrar: {full_path}")
         return img
     except Exception as e:
         raise HTTPException(
             status_code=500, 
-            detail=f"Erro ao baixar imagem: {str(e)}"
+            detail=f"Erro ao carregar imagem: {str(e)}"
         )
 
 
@@ -76,35 +57,21 @@ def upload_image(
     file_content: bytes,
     storage_path: str,
     content_type: str = "image/png",
-    bucket: str = settings.SUPABASE_BUCKET_TEMP
+    bucket: str = None
 ) -> str:
     """
-    Faz upload de uma imagem para o Supabase Storage.
-    
-    Args:
-        file_content: Conteúdo do arquivo em bytes
-        storage_path: Caminho de destino no bucket
-        content_type: Tipo MIME do arquivo
-        bucket: Nome do bucket (default: pipeline-temp)
-    
-    Returns:
-        Caminho do arquivo no storage
-    
-    Raises:
-        HTTPException: Se houver erro no upload
+    Salva uma imagem no disco local.
     """
     try:
-        supabase = get_supabase()
-        supabase.storage.from_(bucket).upload(
-            path=storage_path,
-            file=file_content,
-            file_options={"content-type": content_type, "upsert": "true"}
-        )
+        full_path = os.path.join(STORAGE_DIR, storage_path)
+        _ensure_dir(full_path)
+        with open(full_path, "wb") as f:
+            f.write(file_content)
         return storage_path
     except Exception as e:
         raise HTTPException(
             status_code=500, 
-            detail=f"Erro no upload: {str(e)}"
+            detail=f"Erro no upload local: {str(e)}"
         )
 
 
@@ -113,121 +80,69 @@ def upload_processed_image(
     timestamp: str,
     sha256: str,
     image_type: str,
-    bucket: str = settings.SUPABASE_BUCKET_TEMP
+    bucket: str = None
 ) -> str:
     """
-    Codifica e faz upload de uma imagem processada (numpy array).
-    
-    Args:
-        image: Imagem como array numpy
-        timestamp: Timestamp do lote
-        sha256: Hash SHA256 da imagem original
-        image_type: Tipo da imagem (areas, pins, boxes, shafts)
-        bucket: Nome do bucket (default: pipeline-temp)
-    
-    Returns:
-        Caminho do arquivo no storage
-    
-    Raises:
-        HTTPException: Se houver erro na codificação ou upload
+    Salva uma imagem processada no disco local.
     """
     try:
-        success, buffer = cv2.imencode('.png', image)
-        if not success:
-            raise ValueError("Não foi possível codificar a imagem")
-        
-        image_bytes = buffer.tobytes()
         storage_path = f"{timestamp}/{sha256}/processed_{image_type}.png"
+        full_path = os.path.join(STORAGE_DIR, storage_path)
+        _ensure_dir(full_path)
         
-        supabase = get_supabase()
-        supabase.storage.from_(bucket).upload(
-            path=storage_path,
-            file=image_bytes,
-            file_options={"content-type": "image/png", "upsert": "true"}
-        )
+        success = cv2.imwrite(full_path, image)
+        if not success:
+            raise ValueError("Não foi possivel salvar a imagem pelo OpenCV.")
+        
         return storage_path
     except Exception as e:
         raise HTTPException(
             status_code=500, 
-            detail=f"Erro ao fazer upload: {str(e)}"
+            detail=f"Erro ao salvar imagem processada: {str(e)}"
         )
 
 
 def move_file_between_buckets(
     source_path: str,
     dest_path: str,
-    source_bucket: str,
-    dest_bucket: str
+    source_bucket: str = None,
+    dest_bucket: str = None
 ) -> bool:
     """
-    Move um arquivo entre buckets (download + upload).
-    
-    Args:
-        source_path: Caminho no bucket de origem
-        dest_path: Caminho no bucket de destino
-        source_bucket: Nome do bucket de origem
-        dest_bucket: Nome do bucket de destino
-    
-    Returns:
-        True se sucesso, False se falha
+    Move um arquivo localmente (simula mover do temp pro permanent se necessário).
     """
+    # Como não há buckets, podemos apenas renomear ou copiar
+    full_source = os.path.join(STORAGE_DIR, source_path)
+    full_dest = os.path.join(STORAGE_DIR, dest_path)
     try:
-        supabase = get_supabase()
-        file_data = supabase.storage.from_(source_bucket).download(source_path)
-        supabase.storage.from_(dest_bucket).upload(
-            path=dest_path,
-            file=file_data,
-            file_options={"upsert": "true"}
-        )
+        _ensure_dir(full_dest)
+        shutil.move(full_source, full_dest)
         return True
     except Exception as e:
         print(f"Erro ao mover arquivo {source_path}: {str(e)}")
         return False
 
 
-def delete_folder(timestamp: str, bucket: str) -> bool:
+def delete_folder(timestamp: str, bucket: str = None) -> bool:
     """
-    Deleta uma pasta (timestamp) e todo seu conteúdo do bucket.
-    
-    Args:
-        timestamp: Nome da pasta (timestamp do lote)
-        bucket: Nome do bucket
-    
-    Returns:
-        True se sucesso, False se falha
+    Deleta uma pasta local associada a um timestamp.
     """
     try:
-        supabase = get_supabase()
-        files = supabase.storage.from_(bucket).list(timestamp)
-        
-        for folder in files:
-            sha256_folder = folder['name']
-            inner_files = supabase.storage.from_(bucket).list(
-                f"{timestamp}/{sha256_folder}"
-            )
-            files_to_delete = [
-                f"{timestamp}/{sha256_folder}/{f['name']}" 
-                for f in inner_files
-            ]
-            if files_to_delete:
-                supabase.storage.from_(bucket).remove(files_to_delete)
-        
+        folder_path = os.path.join(STORAGE_DIR, timestamp)
+        if os.path.exists(folder_path):
+            shutil.rmtree(folder_path)
         return True
     except Exception as e:
-        print(f"Erro ao deletar pasta {timestamp}: {str(e)}")
+        print(f"Erro ao deletar pasta local {timestamp}: {str(e)}")
         return False
 
 
 def check_connection() -> bool:
     """
-    Verifica se a conexão com o Supabase está funcionando.
-    
-    Returns:
-        True se conectado, False caso contrário
+    Verifica se o diretório local de storage existe/pode ser lido.
     """
     try:
-        supabase = get_supabase()
-        supabase.storage.from_(settings.SUPABASE_BUCKET_TEMP).list()
-        return True
+        os.makedirs(STORAGE_DIR, exist_ok=True)
+        return os.path.exists(STORAGE_DIR)
     except Exception:
         return False

@@ -112,6 +112,20 @@ async def upload_batch_images(files: List[UploadFile]) -> Dict[str, Any]:
                 bucket=settings.SUPABASE_BUCKET_TEMP
             )
             
+            # Registrar na memória temporária para quando for salvar o lote definitivo
+            from app.core.image_cache import get_image_cache
+            import cv2
+            import numpy as np
+            
+            cache = get_image_cache()
+            cache.create_batch(batch_timestamp)
+            
+            # Converter bytes para numpy array
+            nparr = np.frombuffer(file_content, np.uint8)
+            img_np = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+            
+            cache.add_image(batch_timestamp, sha256, file.filename, img_np)
+            
             uploaded_files.append({
                 "filename": file.filename,
                 "storage_path": storage_path,
@@ -121,6 +135,8 @@ async def upload_batch_images(files: List[UploadFile]) -> Dict[str, Any]:
         except HTTPException:
             raise
         except Exception as e:
+            import traceback
+            traceback.print_exc()
             raise HTTPException(
                 status_code=500,
                 detail=f"Erro no upload de {file.filename}: {str(e)}"
@@ -180,6 +196,19 @@ def process_single_image(img_info: ImageProcessRequest) -> ImageProcessResult:
     shafts_path = upload_processed_image(
         shafts_image, img_info.timestamp, img_info.sha256, "shafts"
     )
+    
+    # Atualizar imagens processadas no cache para a criação do lote
+    from app.core.image_cache import get_image_cache
+    cache = get_image_cache()
+    if areas_image is not None:
+        cache.update_processed(img_info.timestamp, img_info.sha256, "areas", areas_image)
+    if pins_image is not None:
+        cache.update_processed(img_info.timestamp, img_info.sha256, "pins", pins_image)
+    if boxes_image is not None:
+        cache.update_processed(img_info.timestamp, img_info.sha256, "boxes", boxes_image)
+    if shafts_image is not None:
+        cache.update_processed(img_info.timestamp, img_info.sha256, "shafts", shafts_image)
+
     
     # Obter URLs públicas
     original_url = get_public_url(img_info.storage_path)

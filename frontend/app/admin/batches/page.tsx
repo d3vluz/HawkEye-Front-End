@@ -14,8 +14,7 @@ import {
 } from "@/components/ui/table"
 import { Button } from "@/components/ui/button"
 import { Search, Eye, ChevronRight, Loader2, Trash2 } from "lucide-react"
-import { getBatches, deleteBatch } from "@/lib/supabase/dashboard-service"
-import type { Batch } from "@/lib/supabase/supabase"
+import { getBatches, deleteBatch, type Batch } from "@/lib/api-client"
 
 export default function LotesPage() {
   const router = useRouter()
@@ -32,7 +31,7 @@ export default function LotesPage() {
   const loadBatches = async () => {
     try {
       setLoading(true)
-      const { batches: data } = await getBatches(1, 100) // Carregar primeiros 100
+      const { batches: data } = await getBatches() // Carregar todos
       setBatches(data)
       setError(null)
     } catch (err) {

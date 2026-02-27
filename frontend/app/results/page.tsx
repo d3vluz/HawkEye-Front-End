@@ -12,8 +12,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area"
 import { Badge } from "@/components/ui/badge"
-import { 
-  Loader2, CheckCircle2, XCircle, Package, AlertTriangle, 
+import {
+  Loader2, CheckCircle2, XCircle, Package, AlertTriangle,
   LayoutGrid, ZoomIn, Ruler, AlertOctagon, Activity, Hash, Maximize2, Crosshair
 } from "lucide-react"
 import { Alert, AlertDescription } from "@/components/ui/alert"
@@ -108,8 +108,8 @@ export default function ResultsPage() {
         if (savedData) {
           const parsedData = JSON.parse(savedData)
           setImages(parsedData)
-        } else if (usingGlobal === "true" && (window as any).globalProcessedImages) {
-          setImages((window as any).globalProcessedImages)
+        } else if (usingGlobal === "true" && ('globalProcessedImages' in window)) {
+          setImages((window as { globalProcessedImages?: ProcessedImage[] }).globalProcessedImages || [])
         } else {
           router.push("/")
           return
@@ -124,7 +124,7 @@ export default function ResultsPage() {
 
     loadData()
   }, [router])
-  
+
   const selectedImage = images[selectedImageIndex]
 
   const calculateShaftAverages = (shaftClass?: ShaftClassification) => {
@@ -238,7 +238,7 @@ export default function ResultsPage() {
       sessionStorage.removeItem("processedImages")
       sessionStorage.removeItem("usingGlobalMemory")
       router.push("/")
-    } catch (error) {
+    } catch (_error) {
       setSaveError("Erro ao rejeitar lote")
     } finally {
       setIsSaving(false)
@@ -351,27 +351,27 @@ export default function ResultsPage() {
               </div>
               <div className="w-full">
                 <ScrollArea className="w-full whitespace-nowrap">
-                    <div className="flex w-max space-x-2 p-3 items-center">
-                        {images.map((img, index) => (
-                            <button
-                            key={index}
-                            onClick={() => setSelectedImageIndex(index)}
-                            className={cn(
-                                "relative w-[70px] h-[70px] flex-shrink-0 rounded-md overflow-hidden border-2 transition-all",
-                                selectedImageIndex === index
-                                ? "border-primary ring-2 ring-primary/20"
-                                : "border-transparent opacity-60 hover:opacity-100"
-                            )}
-                            >
-                            <Image src={img.original_url} alt="" fill className="object-cover" />
-                            <div className={cn(
-                                "absolute top-1 right-1 w-2 h-2 rounded-full z-10",
-                                (img.pin_classification?.critical_pins || 0) > 0 ? "bg-red-500" : "bg-green-500"
-                            )} />
-                            </button>
-                        ))}
-                    </div>
-                    <ScrollBar orientation="horizontal" />
+                  <div className="flex w-max space-x-2 p-3 items-center">
+                    {images.map((img, index) => (
+                      <button
+                        key={index}
+                        onClick={() => setSelectedImageIndex(index)}
+                        className={cn(
+                          "relative w-[70px] h-[70px] flex-shrink-0 rounded-md overflow-hidden border-2 transition-all",
+                          selectedImageIndex === index
+                            ? "border-primary ring-2 ring-primary/20"
+                            : "border-transparent opacity-60 hover:opacity-100"
+                        )}
+                      >
+                        <Image src={img.original_url} alt="" fill className="object-cover" />
+                        <div className={cn(
+                          "absolute top-1 right-1 w-2 h-2 rounded-full z-10",
+                          (img.pin_classification?.critical_pins || 0) > 0 ? "bg-red-500" : "bg-green-500"
+                        )} />
+                      </button>
+                    ))}
+                  </div>
+                  <ScrollBar orientation="horizontal" />
                 </ScrollArea>
               </div>
             </Card>
@@ -396,83 +396,83 @@ export default function ResultsPage() {
                         
                         {/* 1. Grid Unificado */}
                         <div className="grid grid-cols-2 gap-3">
-                           <div className="p-3 rounded-lg bg-blue-50 dark:bg-blue-950/20 border border-blue-100 dark:border-blue-900">
-                              <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Total Pins</p>
-                              <p className="text-2xl font-bold text-blue-600 dark:text-blue-400">{selectedImage.pins_count}</p>
-                           </div>
-                           <div className="p-3 rounded-lg bg-purple-50 dark:bg-purple-950/20 border border-purple-100 dark:border-purple-900">
-                              <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Áreas</p>
-                              <p className="text-2xl font-bold text-purple-600 dark:text-purple-400">{selectedImage.areas_count}</p>
-                           </div>
+                          <div className="p-3 rounded-lg bg-blue-50 dark:bg-blue-950/20 border border-blue-100 dark:border-blue-900">
+                            <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Total Pins</p>
+                            <p className="text-2xl font-bold text-blue-600 dark:text-blue-400">{selectedImage.pins_count}</p>
+                          </div>
+                          <div className="p-3 rounded-lg bg-purple-50 dark:bg-purple-950/20 border border-purple-100 dark:border-purple-900">
+                            <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Áreas</p>
+                            <p className="text-2xl font-bold text-purple-600 dark:text-purple-400">{selectedImage.areas_count}</p>
+                          </div>
 
-                           {/* Título Metrologia Pins */}
-                           <h4 className="text-xs font-semibold flex items-center gap-2 text-primary uppercase tracking-wide col-span-2 mt-2">
-                             <Crosshair className="w-3.5 h-3.5" /> Metrologia dos Pins
-                           </h4>
+                          {/* Título Metrologia Pins */}
+                          <h4 className="text-xs font-semibold flex items-center gap-2 text-primary uppercase tracking-wide col-span-2 mt-2">
+                            <Crosshair className="w-3.5 h-3.5" /> Metrologia dos Pins
+                          </h4>
 
-                           <div className="p-3 rounded-lg bg-muted/40 border border-dashed">
-                              <div className="flex items-center gap-1 mb-1">
-                                <Maximize2 className="w-3 h-3 text-muted-foreground"/>
-                                <p className="text-[10px] text-muted-foreground uppercase">Área Média</p>
-                              </div>
-                              <p className="text-lg font-mono font-medium truncate">
-                                  {selectedImage.pin_classification?.average_area.toFixed(0)} px²
-                              </p>
-                           </div>
-                           <div className="p-3 rounded-lg bg-muted/40 border border-dashed">
-                              <div className="flex items-center gap-1 mb-1">
-                                <AlertTriangle className="w-3 h-3 text-muted-foreground"/>
-                                <p className="text-[10px] text-muted-foreground uppercase">Limiar</p>
-                              </div>
-                              <p className="text-lg font-mono font-medium text-muted-foreground truncate">
-                                  {selectedImage.pin_classification?.damaged_threshold.toFixed(0)} px²
-                              </p>
-                           </div>
+                          <div className="p-3 rounded-lg bg-muted/40 border border-dashed">
+                            <div className="flex items-center gap-1 mb-1">
+                              <Maximize2 className="w-3 h-3 text-muted-foreground" />
+                              <p className="text-[10px] text-muted-foreground uppercase">Área Média</p>
+                            </div>
+                            <p className="text-lg font-mono font-medium truncate">
+                              {selectedImage.pin_classification?.average_area.toFixed(0)} px²
+                            </p>
+                          </div>
+                          <div className="p-3 rounded-lg bg-muted/40 border border-dashed">
+                            <div className="flex items-center gap-1 mb-1">
+                              <AlertTriangle className="w-3 h-3 text-muted-foreground" />
+                              <p className="text-[10px] text-muted-foreground uppercase">Limiar</p>
+                            </div>
+                            <p className="text-lg font-mono font-medium text-muted-foreground truncate">
+                              {selectedImage.pin_classification?.damaged_threshold.toFixed(0)} px²
+                            </p>
+                          </div>
                         </div>
 
                         {/* 2. Metrologia das HASTES */}
                         <div className="space-y-2 pt-2 border-t border-dashed">
-                           <h4 className="text-xs font-semibold flex items-center gap-2 text-primary uppercase tracking-wide">
-                             <Ruler className="w-3.5 h-3.5" /> Análise Dimensional (Hastes)
-                           </h4>
-                           <div className="grid grid-cols-3 gap-2 text-center text-xs">
-                              <div className="bg-muted/40 p-2 rounded border border-dashed">
-                                 <div className="flex justify-center mb-1"><Hash className="w-3 h-3 text-muted-foreground"/></div>
-                                 <div className="font-bold font-mono">{selectedImage.shaft_classification?.total_shafts || 0}</div>
-                                 <div className="text-[9px] uppercase text-muted-foreground mt-0.5">Qtd</div>
-                              </div>
-                              <div className="bg-muted/40 p-2 rounded border border-dashed">
-                                 <div className="flex justify-center mb-1"><Ruler className="w-3 h-3 text-muted-foreground"/></div>
-                                 <div className="font-bold font-mono">{shaftStats.length.toFixed(1)}px</div>
-                                 <div className="text-[9px] uppercase text-muted-foreground mt-0.5">Comp.</div>
-                              </div>
-                              <div className="bg-muted/40 p-2 rounded border border-dashed">
-                                 <div className="flex justify-center mb-1"><Activity className="w-3 h-3 text-muted-foreground"/></div>
-                                 <div className="font-bold font-mono">{shaftStats.straightness.toFixed(2)}</div>
-                                 <div className="text-[9px] uppercase text-muted-foreground mt-0.5">Retidão</div>
-                              </div>
-                           </div>
+                          <h4 className="text-xs font-semibold flex items-center gap-2 text-primary uppercase tracking-wide">
+                            <Ruler className="w-3.5 h-3.5" /> Análise Dimensional (Hastes)
+                          </h4>
+                          <div className="grid grid-cols-3 gap-2 text-center text-xs">
+                            <div className="bg-muted/40 p-2 rounded border border-dashed">
+                              <div className="flex justify-center mb-1"><Hash className="w-3 h-3 text-muted-foreground" /></div>
+                              <div className="font-bold font-mono">{selectedImage.shaft_classification?.total_shafts || 0}</div>
+                              <div className="text-[9px] uppercase text-muted-foreground mt-0.5">Qtd</div>
+                            </div>
+                            <div className="bg-muted/40 p-2 rounded border border-dashed">
+                              <div className="flex justify-center mb-1"><Ruler className="w-3 h-3 text-muted-foreground" /></div>
+                              <div className="font-bold font-mono">{shaftStats.length.toFixed(1)}px</div>
+                              <div className="text-[9px] uppercase text-muted-foreground mt-0.5">Comp.</div>
+                            </div>
+                            <div className="bg-muted/40 p-2 rounded border border-dashed">
+                              <div className="flex justify-center mb-1"><Activity className="w-3 h-3 text-muted-foreground" /></div>
+                              <div className="font-bold font-mono">{shaftStats.straightness.toFixed(2)}</div>
+                              <div className="text-[9px] uppercase text-muted-foreground mt-0.5">Retidão</div>
+                            </div>
+                          </div>
                         </div>
 
                         {/* 3. Ocupação */}
                         <div className="space-y-2 pt-2 border-t border-dashed pb-2">
-                           <h4 className="text-xs font-semibold flex items-center gap-2 uppercase tracking-wide">
-                             <Package className="w-3.5 h-3.5" /> Ocupação
-                           </h4>
-                           <div className="grid grid-cols-3 gap-2 text-center text-xs">
-                              <div className="bg-muted p-2 rounded">
-                                 <div className="font-bold text-lg">{selectedImage.boxes_info?.single_pin_boxes}</div>
-                                 <div className="text-[10px] text-muted-foreground">1 Pin</div>
-                              </div>
-                              <div className={cn("p-2 rounded bg-muted", (selectedImage.boxes_info?.empty_boxes || 0) > 0 && "bg-red-100 dark:bg-red-900/20 text-red-600")}>
-                                 <div className="font-bold text-lg">{selectedImage.boxes_info?.empty_boxes}</div>
-                                 <div className="text-[10px]">Vazias</div>
-                              </div>
-                              <div className={cn("p-2 rounded bg-muted", (selectedImage.boxes_info?.multiple_pins_boxes || 0) > 0 && "bg-orange-100 dark:bg-orange-900/20 text-orange-600")}>
-                                 <div className="font-bold text-lg">{selectedImage.boxes_info?.multiple_pins_boxes}</div>
-                                 <div className="text-[10px]">Extras</div>
-                              </div>
-                           </div>
+                          <h4 className="text-xs font-semibold flex items-center gap-2 uppercase tracking-wide">
+                            <Package className="w-3.5 h-3.5" /> Ocupação
+                          </h4>
+                          <div className="grid grid-cols-3 gap-2 text-center text-xs">
+                            <div className="bg-muted p-2 rounded">
+                              <div className="font-bold text-lg">{selectedImage.boxes_info?.single_pin_boxes}</div>
+                              <div className="text-[10px] text-muted-foreground">1 Pin</div>
+                            </div>
+                            <div className={cn("p-2 rounded bg-muted", (selectedImage.boxes_info?.empty_boxes || 0) > 0 && "bg-red-100 dark:bg-red-900/20 text-red-600")}>
+                              <div className="font-bold text-lg">{selectedImage.boxes_info?.empty_boxes}</div>
+                              <div className="text-[10px]">Vazias</div>
+                            </div>
+                            <div className={cn("p-2 rounded bg-muted", (selectedImage.boxes_info?.multiple_pins_boxes || 0) > 0 && "bg-orange-100 dark:bg-orange-900/20 text-orange-600")}>
+                              <div className="font-bold text-lg">{selectedImage.boxes_info?.multiple_pins_boxes}</div>
+                              <div className="text-[10px]">Extras</div>
+                            </div>
+                          </div>
                         </div>
 
                       </div>
@@ -548,78 +548,78 @@ export default function ResultsPage() {
           <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between p-6 gap-6">
             
             <div className="flex items-center gap-8">
-               <div>
-                 <Label className="text-xs text-muted-foreground uppercase">Status do Lote</Label>
-                 <h2 className="text-2xl font-bold flex items-center gap-2">
-                   {images.length} Imagens
-                 </h2>
-               </div>
-               <div className="h-10 w-px bg-border hidden lg:block" />
-               <div className="grid grid-cols-3 gap-6 text-center">
-                 <div>
-                   <div className="text-2xl font-bold text-green-600">
-                     {images.reduce((acc, img) => acc + (img.pin_classification?.valid_pins || 0), 0)}
-                   </div>
-                   <div className="text-[10px] uppercase text-muted-foreground font-bold">Pins OK</div>
-                 </div>
-                 <div>
-                   <div className="text-2xl font-bold text-red-600">
-                     {images.reduce((acc, img) => acc + (img.pin_classification?.critical_pins || 0), 0)}
-                   </div>
-                   <div className="text-[10px] uppercase text-muted-foreground font-bold">Críticos</div>
-                 </div>
-                 <div>
-                   <div className="text-2xl font-bold text-orange-600">
-                     {images.reduce((acc, img) => acc + (img.boxes_info?.multiple_pins_boxes || 0), 0)}
-                   </div>
-                   <div className="text-[10px] uppercase text-muted-foreground font-bold">Extras</div>
-                 </div>
-               </div>
+              <div>
+                <Label className="text-xs text-muted-foreground uppercase">Status do Lote</Label>
+                <h2 className="text-2xl font-bold flex items-center gap-2">
+                  {images.length} Imagens
+                </h2>
+              </div>
+              <div className="h-10 w-px bg-border hidden lg:block" />
+              <div className="grid grid-cols-3 gap-6 text-center">
+                <div>
+                  <div className="text-2xl font-bold text-green-600">
+                    {images.reduce((acc, img) => acc + (img.pin_classification?.valid_pins || 0), 0)}
+                  </div>
+                  <div className="text-[10px] uppercase text-muted-foreground font-bold">Pins OK</div>
+                </div>
+                <div>
+                  <div className="text-2xl font-bold text-red-600">
+                    {images.reduce((acc, img) => acc + (img.pin_classification?.critical_pins || 0), 0)}
+                  </div>
+                  <div className="text-[10px] uppercase text-muted-foreground font-bold">Críticos</div>
+                </div>
+                <div>
+                  <div className="text-2xl font-bold text-orange-600">
+                    {images.reduce((acc, img) => acc + (img.boxes_info?.multiple_pins_boxes || 0), 0)}
+                  </div>
+                  <div className="text-[10px] uppercase text-muted-foreground font-bold">Extras</div>
+                </div>
+              </div>
             </div>
 
             {/* Formulário de Aprovação/Rejeição */}
             <div className="flex flex-col sm:flex-row gap-4 w-full lg:w-auto items-start">
-               <div className="flex flex-col gap-2 w-full sm:w-[350px]">
-                  <Input 
-                    id="lote-name" 
-                    placeholder="Nome do Lote" 
-                    value={loteName}
-                    onChange={(e) => setLoteName(e.target.value)}
-                    className="h-9"
-                  />
-                  <Textarea 
-                    placeholder="Descrição (opcional)"
-                    value={loteDescription}
-                    onChange={(e) => setLoteDescription(e.target.value)}
-                    className="min-h-[40px] resize-y py-2 text-xs"
-                    rows={1}
-                  />
-               </div>
-               <div className="flex flex-col gap-2 w-full sm:w-auto">
-                 <Button 
-                    className="w-full bg-green-600 hover:bg-green-700 text-white h-9"
-                    onClick={handleAprovarLote}
-                    disabled={isSaving}
-                 >
-                   {isSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <CheckCircle2 className="mr-2 h-4 w-4" />}
-                   Aprovar
-                 </Button>
-                 <Button 
-                    variant="destructive"
-                    className="w-full h-9"
-                    onClick={handleRejeitarLote}
-                    disabled={isSaving}
-                 >
-                   <XCircle className="mr-2 h-4 w-4" />
-                   Rejeitar
-                 </Button>
-               </div>
+              <div className="flex flex-col gap-2 w-full sm:w-[350px]">
+                <Input
+                  id="lote-name"
+                  placeholder="Nome do Lote"
+                  value={loteName}
+                  onChange={(e) => setLoteName(e.target.value)}
+                  className="h-9"
+                />
+                <Textarea
+                  placeholder="Descrição (opcional)"
+                  value={loteDescription}
+                  onChange={(e) => setLoteDescription(e.target.value)}
+                  className="min-h-[40px] resize-y py-2 text-xs"
+                  rows={1}
+                />
+              </div>
+              <div className="flex flex-col gap-2 w-full sm:w-auto">
+                <Button
+                  className="w-full bg-green-600 hover:bg-green-700 text-white h-9"
+                  onClick={handleAprovarLote}
+                  disabled={isSaving}
+                >
+                  {isSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <CheckCircle2 className="mr-2 h-4 w-4" />}
+                  Aprovar
+                </Button>
+                <Button
+                  variant="destructive"
+                  className="w-full h-9"
+                  onClick={handleRejeitarLote}
+                  disabled={isSaving}
+                >
+                  <XCircle className="mr-2 h-4 w-4" />
+                  Rejeitar
+                </Button>
+              </div>
             </div>
 
           </div>
         </Card>
       </main>
-      
+
       <Footer />
     </div>
   )

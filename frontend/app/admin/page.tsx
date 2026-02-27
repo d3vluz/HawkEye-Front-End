@@ -6,7 +6,7 @@ import KPICards from "@/components/dashboard/kpi-cards"
 import DefectRanking from "@/components/dashboard/defect-ranking"
 import QualityCharts from "@/components/dashboard/quality-charts"
 import BatchMetrics from "@/components/dashboard/batch-metrics"
-import { getDashboardMetrics, type DashboardMetrics } from "@/lib/supabase/dashboard-service"
+import { getDashboardMetrics, type DashboardMetrics } from "@/lib/api-client"
 
 export default function DashboardPage() {
   const [dashboardData, setDashboardData] = useState<DashboardMetrics | null>(null)
