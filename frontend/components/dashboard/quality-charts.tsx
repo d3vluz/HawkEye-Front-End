@@ -24,19 +24,22 @@ interface QualityChartsProps {
 
 export default function QualityCharts({ data }: QualityChartsProps) {
 
-  const validEntry = data.validityDistribution.find(entry => entry.name === 'Válidas') || { 
-    value: 0, 
-    color: '#193cb8'
+  const validEntry = data.validityDistribution[0] || {
+    value: 0,
+    name: 'Válidas',
+    color: '#10b981'
   };
-  
-  const incorrectEntry = data.validityDistribution.find(entry => entry.name === 'Inválidas') || { 
-    value: 0, 
+
+  const incorrectEntry = data.validityDistribution[1] || {
+    value: 0,
+    name: 'Com Defeito',
     color: '#ef4444'
   };
 
-  const validPercentage = validEntry.value;
-  const incorrectPercentage = incorrectEntry.value;
-  const CHART_DRAWING_AREA = 320; 
+  const total = validEntry.value + incorrectEntry.value;
+  const validPercentage = total > 0 ? Math.round((validEntry.value / total) * 100) : 0;
+  const incorrectPercentage = total > 0 ? Math.round((incorrectEntry.value / total) * 100) : 0;
+  const CHART_DRAWING_AREA = 320;
 
   return (
     <div className="space-y-6">
