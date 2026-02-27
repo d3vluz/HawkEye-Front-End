@@ -1,0 +1,49 @@
+version: '3.8'
+
+services:
+  db:
+    image: postgres:15-alpine
+    container_name: hawkeye-db
+    restart: always
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-hawkeye_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-hawkeye_pass}
+      POSTGRES_DB: ${POSTGRES_DB:-hawkeye_db}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: hawkeye-backend
+    restart: always
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./backend:/app
+      - app_data:/data
+    environment:
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-hawkeye_user}:${POSTGRES_PASSWORD:-hawkeye_pass}@db:5432/${POSTGRES_DB:-hawkeye_db}
+    depends_on:
+      - db
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: hawkeye-frontend
+    restart: always
+    ports:
+      - "3000:3000"
+
+    environment:
+      - NEXT_PUBLIC_API_URL=http://localhost:8000
+    depends_on:
+      - backend
+
+volumes:
+  postgres_data:
+  app_data:
